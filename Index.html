@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WBC Count: Virtual Neubauer Lab</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Font for Handwriting -->
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* --- CORE STYLES --- */
+        :root {
+            --medical-blue: #0ea5e9;
+            --turks-violet: #7c3aed;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: #f1f5f9;
+            overflow: hidden; 
+            user-select: none;
+        }
+
+        /* Handwritten Notes Style */
+        .handwritten {
+            font-family: 'Caveat', cursive;
+            color: #2563eb;
+        }
+
+        /* --- MICROSCOPE OPTICS --- */
+        .microscope-viewport-outer {
+            width: 400px;
+            height: 400px;
+            background: #1e293b;
+            border-radius: 50%;
+            padding: 10px;
+            box-shadow: 
+                0 0 0 15px #0f172a,
+                0 20px 50px rgba(0,0,0,0.5),
+                inset 0 0 60px rgba(0,0,0,0.8);
+            position: relative;
+            margin: 0 auto;
+        }
+
+        .microscope-lens {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: #fff;
+            position: relative;
+            overflow: hidden;
+            box-shadow: inset 0 0 100px rgba(0,0,0,0.6); 
+            cursor: grab;
+        }
+
+        .optic-layer {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            transition: filter 0.1s ease-out;
+            background-image: 
+                linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+            background-color: #f8fafc;
+        }
+
+        /* WBC Nuclei */
+        .wbc-nucleus {
+            width: 14px; /* Increased size for visibility */
+            height: 14px;
+            background: radial-gradient(circle at 30% 30%, #4c1d95, #2e1065);
+            border-radius: 50%;
+            position: absolute;
+            z-index: 50; /* Ensure on top of grid lines */
+            box-shadow: 0 0 4px rgba(0,0,0,0.4);
+            transform: scale(var(--scale, 1)); 
+            cursor: pointer;
+        }
+
+        .wbc-nucleus::after {
+            content: '';
+            position: absolute;
+            top: 3px; left: 3px;
+            width: 4px; height: 4px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 50%;
+        }
+
+        .wbc-nucleus.counted {
+            border: 2px solid #22c55e;
+            background: rgba(34, 197, 94, 0.4);
+        }
+
+        /* --- ANIMATIONS --- */
+        @keyframes float-instruction {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+        
+        @keyframes shake-hard {
+            0% { transform: translate(0, 0) rotate(0); }
+            20% { transform: translate(-10px, 0) rotate(-5deg); }
+            40% { transform: translate(10px, 0) rotate(5deg); }
+            60% { transform: translate(-10px, 0) rotate(-5deg); }
+            80% { transform: translate(10px, 0) rotate(5deg); }
+            100% { transform: translate(0, 0) rotate(0); }
+        }
+
+        .animate-shake-pipette { animation: shake-hard 0.4s ease-in-out infinite; }
+
+        .nav-item.active {
+            background-color: #0ea5e9;
+            color: white;
+            font-weight: bold;
+            border-right: 4px solid #0369a1;
+        }
+
+        .page-section {
+            display: none;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .page-section.active {
+            display: flex;
+            opacity: 1;
+        }
+        
+        .video-container {
+            position: relative;
+            padding-bottom: 56.25%;
+            height: 0;
+            overflow: hidden;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .video-container iframe {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+        }
+
+        .equip-card { transition: transform 0.2s; }
+        .equip-card:hover { transform: translateY(-5px); }
+
+        /* Print Styles */
+        @media print {
+            body * { visibility: hidden; }
+            #printable-report, #printable-report * { visibility: visible; }
+            #printable-report { position: absolute; left: 0; top: 0; width: 100%; }
+            #modal-calc { background: white; }
+        }
+
+        /* Error States */
+        .broken-glass {
+            background-image: url('https://www.transparenttextures.com/patterns/cracked-glass.png'); /* Fallback pattern */
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body class="flex h-screen w-screen bg-slate-100 text-slate-800">
+
+    <!-- START SCREEN: PATIENT SCENARIO -->
+    <div id="patient-modal" class="fixed inset-0 bg-slate-900 z-[100] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-4xl w-full p-8 shadow-2xl flex flex-col md:flex-row gap-8">
+            <div class="md:w-1/3 border-r border-slate-200 pr-8 flex flex-col items-center justify-center text-center">
+                <i class="fa-solid fa-user-doctor text-6xl text-sky-600 mb-4"></i>
+                <h1 class="text-3xl font-extrabold text-slate-800">HemaLab VR</h1>
+                <p class="text-slate-500 mt-2">Select a case study to begin your shift.</p>
+            </div>
+            <div class="md:w-2/3 space-y-4">
+                <h2 class="text-xl font-bold text-slate-700 mb-4">Today's Patients:</h2>
+                
+                <button onclick="selectPatient('normal')" class="w-full text-left p-4 border border-slate-200 rounded-xl hover:bg-sky-50 hover:border-sky-300 transition group">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-slate-800 group-hover:text-sky-700">Patient A: John Doe</span>
+                        <span class="bg-green-100 text-green-700 text-xs px-2 py-1 rounded">Routine Checkup</span>
+                    </div>
+                    <p class="text-sm text-slate-500 mt-1">30yo Male. No active complaints.</p>
+                </button>
+
+                <button onclick="selectPatient('high')" class="w-full text-left p-4 border border-slate-200 rounded-xl hover:bg-orange-50 hover:border-orange-300 transition group">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-slate-800 group-hover:text-orange-700">Patient B: Sarah Smith</span>
+                        <span class="bg-orange-100 text-orange-700 text-xs px-2 py-1 rounded">High Fever</span>
+                    </div>
+                    <p class="text-sm text-slate-500 mt-1">45yo Female. Acute appendicitis suspected.</p>
+                </button>
+
+                <button onclick="selectPatient('low')" class="w-full text-left p-4 border border-slate-200 rounded-xl hover:bg-red-50 hover:border-red-300 transition group">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-slate-800 group-hover:text-red-700">Patient C: Robert Lee</span>
+                        <span class="bg-red-100 text-red-700 text-xs px-2 py-1 rounded">Oncology</span>
+                    </div>
+                    <p class="text-sm text-slate-500 mt-1">60yo Male. Post-chemotherapy monitoring.</p>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SIDEBAR NAVIGATION -->
+    <nav class="w-64 bg-slate-900 text-slate-300 flex flex-col shadow-2xl z-20 shrink-0">
+        <div class="p-6 border-b border-slate-700">
+            <div class="flex items-center gap-2 text-white">
+                <i class="fa-solid fa-flask-vial text-sky-400 text-2xl"></i>
+                <span class="font-bold text-lg tracking-tight">HemaLab VR</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">Virtual Neubauer Trainer</p>
+            <div class="mt-4 flex flex-col gap-2">
+                <button id="voice-toggle" onclick="toggleVoice()" class="text-xs bg-slate-800 hover:bg-slate-700 text-green-400 border border-green-500/30 px-3 py-1 rounded-full flex items-center gap-1 transition-colors">
+                    <i class="fa-solid fa-volume-high"></i> Voice: ON
+                </button>
+                 <button id="hum-toggle" onclick="toggleHum()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-500/30 px-3 py-1 rounded-full flex items-center gap-1 transition-colors">
+                    <i class="fa-solid fa-fan"></i> Lab Hum: OFF
+                </button>
+            </div>
+        </div>
+
+        <div class="flex-1 py-6 space-y-1">
+            <button onclick="navTo('home')" class="nav-item active w-full text-left px-6 py-3 hover:bg-slate-800 transition flex items-center gap-3">
+                <i class="fa-solid fa-house w-6 text-center"></i> Reception
+            </button>
+            <button onclick="navTo('theory')" class="nav-item w-full text-left px-6 py-3 hover:bg-slate-800 transition flex items-center gap-3">
+                <i class="fa-solid fa-book-medical w-6 text-center"></i> Theory & Safety
+            </button>
+            <button id="nav-dilution" onclick="navTo('dilution')" class="nav-item w-full text-left px-6 py-3 hover:bg-slate-800 transition flex items-center gap-3 opacity-50 cursor-not-allowed" disabled>
+                <i class="fa-solid fa-eye-dropper w-6 text-center"></i> Dilution Lab <i class="fa-solid fa-lock text-xs ml-auto"></i>
+            </button>
+            <button id="nav-charging" onclick="navTo('charging')" class="nav-item w-full text-left px-6 py-3 hover:bg-slate-800 transition flex items-center gap-3 opacity-50 cursor-not-allowed" disabled>
+                <i class="fa-solid fa-table-cells w-6 text-center"></i> Charging Lab <i class="fa-solid fa-lock text-xs ml-auto"></i>
+            </button>
+            <button id="nav-microscope" onclick="navTo('microscope')" class="nav-item w-full text-left px-6 py-3 hover:bg-slate-800 transition flex items-center gap-3 opacity-50 cursor-not-allowed" disabled>
+                <i class="fa-solid fa-microscope w-6 text-center"></i> Microscopy <i class="fa-solid fa-lock text-xs ml-auto"></i>
+            </button>
+        </div>
+
+        <div class="p-6 border-t border-slate-800">
+            <div class="bg-slate-800 rounded p-3 text-xs mb-3">
+                <p class="font-bold text-white mb-1">Current Patient</p>
+                <p id="sidebar-patient" class="text-sky-400 font-mono">Not Selected</p>
+            </div>
+            <p class="text-[10px] text-center text-slate-500 font-medium">
+                &copy; 2024 DreamHigh
+            </p>
+        </div>
+    </nav>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="flex-1 relative overflow-hidden bg-slate-50">
+        
+        <!-- PAGE 1: HOME -->
+        <section id="page-home" class="page-section active flex-col relative overflow-y-auto">
+            <div class="relative w-full h-[300px] bg-slate-800 overflow-hidden flex items-center justify-center text-center shrink-0">
+                <div class="absolute inset-0 bg-[url('https://img.freepik.com/free-vector/science-lab-interior-with-furniture-test-tubes_107791-3297.jpg?w=1380')] bg-cover bg-center opacity-20"></div>
+                <div class="relative z-10 px-8">
+                    <h1 class="text-4xl font-extrabold text-white mb-4">Hematology Reception</h1>
+                    <p class="text-slate-300 max-w-2xl mx-auto mb-6">
+                        Before handling the patient sample, review the equipment and pass the <strong>Safety Quiz</strong> to unlock the lab.
+                    </p>
+                    <div class="flex gap-4 justify-center">
+                        <button onclick="openVideoModal()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-full shadow-lg transition flex items-center gap-2">
+                            <i class="fa-brands fa-youtube"></i> Watch Tutorial
+                        </button>
+                        <button onclick="navTo('theory')" class="bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 px-8 rounded-full shadow-lg transition">
+                            Enter Laboratory
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <!-- Equipment Gallery -->
+            <div class="p-8 bg-slate-50">
+                 <h2 class="text-2xl font-bold text-slate-800 mb-6 border-b pb-2"><i class="fa-solid fa-toolbox mr-2 text-sky-600"></i>Laboratory Equipment</h2>
+                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="equip-card bg-white rounded-xl shadow-md border border-slate-200 p-4">
+                        <i class="fa-solid fa-microscope text-4xl text-slate-700 mb-2"></i>
+                        <h3 class="font-bold">Microscope</h3>
+                        <p class="text-sm text-slate-600">Use 40x objective for counting.</p>
+                    </div>
+                    <div class="equip-card bg-white rounded-xl shadow-md border border-slate-200 p-4">
+                        <i class="fa-solid fa-eye-dropper text-4xl text-slate-700 mb-2"></i>
+                        <h3 class="font-bold">WBC Pipette</h3>
+                        <p class="text-sm text-slate-600">White bead. 1:20 dilution.</p>
+                    </div>
+                    <div class="equip-card bg-white rounded-xl shadow-md border border-slate-200 p-4">
+                        <i class="fa-solid fa-table-cells text-4xl text-slate-700 mb-2"></i>
+                        <h3 class="font-bold">Hemocytometer</h3>
+                        <p class="text-sm text-slate-600">Improved Neubauer chamber.</p>
+                    </div>
+                 </div>
+            </div>
+        </section>
+
+        <!-- PAGE 2: THEORY & QUIZ -->
+        <section id="page-theory" class="page-section flex-col p-10 overflow-y-auto">
+            <h2 class="text-3xl font-bold text-slate-800 mb-6 border-b pb-4">Standard Operating Procedure</h2>
+            <div class="grid md:grid-cols-2 gap-8 mb-8">
+                <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500">
+                    <h3 class="text-xl font-bold text-purple-700 mb-3"><i class="fa-solid fa-flask mr-2"></i>Turk's Solution</h3>
+                    <p class="text-slate-600 text-sm">Contains Glacial Acetic Acid (Lyses RBCs) and Gentian Violet (Stains Nuclei).</p>
+                </div>
+                <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-sky-500">
+                    <h3 class="text-xl font-bold text-sky-700 mb-3"><i class="fa-solid fa-calculator mr-2"></i>Calculation</h3>
+                    <p class="text-slate-600 text-sm font-mono">Total WBC = N × 50</p>
+                </div>
+            </div>
+            <!-- QUIZ MODULE -->
+            <div id="quiz-container" class="bg-slate-800 text-white rounded-xl p-8 shadow-xl max-w-3xl mx-auto">
+                <h3 class="text-2xl font-bold mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-id-card-clip text-yellow-400"></i> Lab Safety & Theory Quiz
+                </h3>
+                <p class="mb-6 text-slate-300">You must score 100% to unlock the Dilution Room.</p>
+                <div id="quiz-questions" class="space-y-4">
+                    <div class="space-y-2">
+                        <p class="font-bold">1. What is the dilution factor for WBC counting?</p>
+                        <div class="flex gap-4">
+                            <button onclick="checkAnswer(1, false)" class="q-btn bg-slate-700 px-4 py-2 rounded hover:bg-slate-600">1:10</button>
+                            <button onclick="checkAnswer(1, true)" class="q-btn bg-slate-700 px-4 py-2 rounded hover:bg-slate-600">1:20</button>
+                            <button onclick="checkAnswer(1, false)" class="q-btn bg-slate-700 px-4 py-2 rounded hover:bg-slate-600">1:200</button>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <p class="font-bold">2. Which reagent lyses the RBCs?</p>
+                        <div class="flex gap-4">
+                            <button onclick="checkAnswer(2, true)" class="q-btn bg-slate-700 px-4 py-2 rounded hover:bg-slate-600">Acetic Acid</button>
+                            <button onclick="checkAnswer(2, false)" class="q-btn bg-slate-700 px-4 py-2 rounded hover:bg-slate-600">Formalin</button>
+                            <button onclick="checkAnswer(2, false)" class="q-btn bg-slate-700 px-4 py-2 rounded hover:bg-slate-600">Saline</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="quiz-success" class="hidden mt-6 bg-green-600/20 border border-green-500 p-4 rounded text-center">
+                    <i class="fa-solid fa-check-circle text-4xl text-green-400 mb-2"></i>
+                    <p class="font-bold text-green-300 text-lg">Access Granted!</p>
+                    <button onclick="navTo('dilution')" class="mt-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-full shadow-lg">
+                        Enter Dilution Room <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- PAGE 3: DILUTION LAB -->
+        <section id="page-dilution" class="page-section flex-col bg-slate-200">
+            <div class="bg-white p-4 shadow-sm flex justify-between items-center z-10">
+                <h2 class="text-xl font-bold text-slate-800"><i class="fa-solid fa-eye-dropper text-sky-600 mr-2"></i>Dilution Station</h2>
+                <div class="bg-sky-50 text-sky-700 px-4 py-1 rounded-full text-sm font-bold animate-[float-instruction_3s_infinite]">
+                    <i class="fa-solid fa-circle-info mr-1"></i> <span id="dilution-task">Carefully aspirate Blood to 0.5</span>
+                </div>
+            </div>
+            <!-- Error Feedback Overlay -->
+            <div id="error-overlay" class="absolute inset-0 bg-red-900/80 z-50 hidden flex items-center justify-center text-center p-8">
+                <div class="bg-white rounded-2xl p-8 shadow-2xl max-w-md">
+                    <i class="fa-solid fa-triangle-exclamation text-6xl text-red-600 mb-4"></i>
+                    <h3 id="error-title" class="text-2xl font-bold text-slate-800 mb-2">Error!</h3>
+                    <p id="error-msg" class="text-slate-600 mb-6">Description of failure.</p>
+                    <button onclick="resetDilution()" class="bg-red-600 text-white font-bold py-3 px-8 rounded-full hover:bg-red-700">Restart Procedure</button>
+                </div>
+            </div>
+            <div class="flex-1 relative overflow-hidden flex items-end justify-center pb-0 select-none">
+                <!-- Table Texture -->
+                <div class="absolute inset-0 bg-[#e2e8f0] opacity-50" style="background-image: radial-gradient(#cbd5e1 2px, transparent 2px); background-size: 30px 30px;"></div>
+                <div class="absolute bottom-16 w-full max-w-2xl flex justify-between px-20">
+                    <div id="vial-blood" class="group relative cursor-pointer transition-transform active:scale-95 hover:-translate-y-2 duration-300">
+                        <div class="w-24 h-32 bg-red-50/80 backdrop-blur border-2 border-slate-300 rounded-xl overflow-hidden shadow-xl relative">
+                            <div class="absolute bottom-0 w-full h-3/4 bg-red-700 opacity-90" id="anim-blood-level"></div>
+                            <div class="absolute top-6 w-full text-center"><span class="bg-white/90 text-[10px] font-bold px-2 py-0.5 rounded shadow">SAMPLE</span></div>
+                        </div>
+                        <button onclick="startAspiration('blood')" class="mt-2 w-full bg-slate-700 text-white text-xs py-1 rounded hover:bg-slate-800">Use</button>
+                    </div>
+                    <div id="vial-turks" class="group relative cursor-pointer transition-transform active:scale-95 hover:-translate-y-2 duration-300 opacity-50 pointer-events-none filter grayscale">
+                        <div class="w-24 h-32 bg-purple-50/80 backdrop-blur border-2 border-slate-300 rounded-xl overflow-hidden shadow-xl relative">
+                            <div class="absolute bottom-0 w-full h-3/4 bg-purple-700 opacity-90" id="anim-turks-level"></div>
+                            <div class="absolute top-6 w-full text-center"><span class="bg-white/90 text-[10px] font-bold px-2 py-0.5 rounded shadow">REAGENT</span></div>
+                        </div>
+                        <button onclick="startAspiration('turks')" class="mt-2 w-full bg-slate-700 text-white text-xs py-1 rounded hover:bg-slate-800">Use</button>
+                    </div>
+                </div>
+                <!-- Pipette -->
+                <div id="pipette-obj" class="absolute bottom-32 left-1/2 -translate-x-1/2 transition-all duration-1000 ease-in-out z-20">
+                    <div class="relative w-6 h-96 bg-gradient-to-r from-slate-50 to-slate-200 rounded-full border border-slate-400 shadow-2xl flex flex-col justify-end">
+                        <div class="absolute top-[10%] -right-8 text-xs font-bold text-slate-600">11</div>
+                        <div class="absolute top-[10%] w-full h-px bg-slate-400"></div>
+                        <div class="absolute bottom-[40%] -right-8 text-xs font-bold text-red-600">0.5</div>
+                        <div class="absolute bottom-[40%] w-full h-px bg-red-400"></div>
+                        <div class="absolute top-[45%] left-1/2 -translate-x-1/2 w-10 h-14 bg-white/60 border border-slate-300 rounded-full z-10 flex items-center justify-center backdrop-blur-sm">
+                            <div id="pipette-bead" class="w-2 h-2 bg-white border border-slate-400 rounded-full opacity-0"></div>
+                        </div>
+                        <div id="pipette-fluid" class="w-full bg-red-600 h-0 rounded-b-full opacity-90 z-0 transition-[height] duration-200"></div>
+                    </div>
+                </div>
+                <!-- Stop Button -->
+                <button id="btn-stop-aspiration" onclick="stopAspiration()" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-600 text-white font-bold p-6 rounded-full shadow-2xl z-40 hidden animate-pulse border-4 border-white">STOP!</button>
+                <!-- Shake Overlay -->
+                <div id="shake-overlay" class="absolute inset-0 bg-black/50 z-30 hidden flex items-center justify-center">
+                    <button onclick="performShake()" class="bg-white text-slate-800 p-8 rounded-full shadow-2xl hover:scale-110 transition active:scale-95 flex flex-col items-center">
+                        <i class="fa-solid fa-arrows-up-down text-4xl mb-2 text-indigo-600"></i>
+                        <span class="font-bold">CLICK TO SHAKE</span>
+                    </button>
+                </div>
+            </div>
+            <div class="bg-white p-4 border-t flex justify-end items-center z-10">
+                <button id="btn-dilution-next" onclick="navTo('charging')" disabled class="bg-slate-200 text-slate-400 px-6 py-2 rounded-lg font-bold transition">Finish Dilution</button>
+            </div>
+        </section>
+
+        <!-- PAGE 4: CHARGING (Restructured) -->
+        <section id="page-charging" class="page-section flex-col bg-emerald-50">
+            <div class="p-6 text-center">
+                <h2 class="text-2xl font-bold text-slate-800">Charging the Hemocytometer</h2>
+                <p class="text-slate-600">Click gently to place coverslip. <span class="text-red-500 font-bold">Warning: Fragile Glass!</span></p>
+            </div>
+
+            <!-- New Spacious Workbench Container -->
+            <div class="flex-1 flex items-center justify-center relative overflow-visible">
+                
+                <!-- Main Slide Area -->
+                <div class="relative w-[600px] h-[400px] flex items-center justify-center">
+                    <!-- The Slide Object -->
+                    <div id="slide-obj" class="relative w-[500px] h-[300px] bg-slate-300 rounded-lg shadow-2xl border-4 border-slate-400 flex items-center justify-center transform transition duration-500 z-10">
+                        <span class="absolute top-2 font-mono text-xs text-slate-500 font-bold opacity-50 tracking-widest">NEUBAUER IMPROVED</span>
+                        
+                        <!-- Grid Area (The 'Screen' where liquid goes) -->
+                        <div class="w-48 h-32 bg-gradient-to-br from-slate-100 to-slate-200 border border-slate-400 relative overflow-hidden shadow-inner">
+                            <div class="absolute inset-0 flex items-center justify-center opacity-20">
+                                <div class="w-full h-px bg-black"></div>
+                                <div class="h-full w-px bg-black absolute"></div>
+                            </div>
+                            <!-- Fluid Element -->
+                            <div id="slide-fluid" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0 h-0 bg-purple-600/50 rounded-sm transition-all duration-[2s] blur-[1px]"></div>
+                        </div>
+
+                        <!-- Coverslip (Movable) -->
+                        <!-- Positioned relative to the SLIDE container -->
+                        <div id="slide-coverslip" onclick="chargeInteract('cover')" class="absolute -top-40 left-10 w-28 h-20 bg-blue-100/30 border border-blue-200 shadow-lg cursor-pointer hover:bg-blue-100/50 transition-all duration-1000 ease-out backdrop-blur-sm flex items-center justify-center text-[10px] text-slate-500 font-bold transform rotate-12 z-20">
+                            PLACE ME (GENTLY)
+                        </div>
+                    </div>
+
+                    <!-- The Pipette (Sibling to Slide, higher Z-index, not clipped) -->
+                    <div id="charge-pipette" class="absolute -top-32 -right-16 w-8 h-64 bg-slate-100 border border-slate-400 rounded-b-full shadow-2xl transition-all duration-1000 z-30 opacity-0 pointer-events-none transform rotate-[-45deg]">
+                        <div class="absolute bottom-0 w-2 h-12 bg-purple-600 rounded-b-full left-1/2 -translate-x-1/2"></div>
+                    </div>
+                    
+                    <!-- Broken Glass Overlay (Inside slide container for localized effect) -->
+                    <div id="cracked-glass-overlay" class="absolute inset-0 hidden broken-glass pointer-events-none z-50"></div>
+                </div>
+            </div>
+
+            <div class="p-6 text-center">
+                <button id="btn-perform-charge" onclick="chargeInteract('charge')" class="hidden bg-emerald-600 text-white px-8 py-3 rounded-full font-bold shadow-lg hover:bg-emerald-700 transition animate-bounce">
+                    Touch Edge & Charge
+                </button>
+                <button id="btn-charge-next" onclick="navTo('microscope')" class="hidden bg-slate-800 text-white px-8 py-3 rounded-lg font-bold shadow-lg hover:bg-slate-900 transition">
+                    Go to Microscope <i class="fa-solid fa-microscope ml-2"></i>
+                </button>
+            </div>
+        </section>
+
+        <!-- PAGE 5: MICROSCOPE -->
+        <section id="page-microscope" class="page-section flex-col bg-slate-900 text-slate-100">
+            <div class="flex-1 flex overflow-hidden">
+                <div class="w-80 bg-slate-800 p-6 border-r border-slate-700 flex flex-col gap-6 z-10 shadow-xl">
+                    <h2 class="text-xl font-bold text-sky-400">Controls</h2>
+                    <!-- Focus Knob -->
+                    <div class="bg-slate-700/50 p-4 rounded-lg border border-slate-600">
+                        <label class="flex justify-between text-sm font-bold mb-2"><span>Fine Focus</span> <span id="focus-val" class="text-sky-400">50%</span></label>
+                        <input type="range" id="focus-slider" min="0" max="100" value="0" class="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-ew-resize accent-sky-500">
+                    </div>
+                    <!-- Counter -->
+                    <div class="mt-auto bg-black/40 p-4 rounded-xl border border-slate-600 text-center">
+                        <div class="text-xs uppercase tracking-widest text-slate-400 mb-1">Cell Count (N)</div>
+                        <div id="counter-display" class="text-5xl font-mono text-green-400 font-bold shadow-green-900 drop-shadow-lg">0</div>
+                        <div class="flex gap-2 mt-4">
+                            <button onclick="resetMicroscope()" class="flex-1 bg-slate-600 hover:bg-slate-500 text-xs py-2 rounded">Reset</button>
+                            <button onclick="calcResults()" class="flex-1 bg-purple-600 hover:bg-purple-500 text-xs py-2 rounded font-bold">Calculate</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
+                    <div class="absolute top-4 left-4 z-20 bg-black/60 backdrop-blur text-white text-xs p-3 rounded border border-white/10">
+                        <p class="font-bold text-yellow-400 mb-1"><i class="fa-solid fa-lightbulb"></i> Rule of L:</p>
+                        <p>Count cells on Top & Left lines. Ignore Bottom & Right.</p>
+                    </div>
+                    <div class="microscope-viewport-outer">
+                        <div class="microscope-lens" id="microscope-stage">
+                            <div id="optic-layer" class="optic-layer"></div>
+                        </div>
+                        <div class="absolute inset-0 rounded-full pointer-events-none" style="background: radial-gradient(circle at 70% 30%, rgba(255,255,255,0.1) 0%, transparent 60%);"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- VIDEO MODAL -->
+        <div id="modal-video" class="fixed inset-0 bg-black/90 z-50 hidden flex items-center justify-center p-4">
+            <div class="bg-slate-900 rounded-2xl max-w-4xl w-full p-2 shadow-2xl relative">
+                <button onclick="document.getElementById('modal-video').classList.add('hidden'); stopVideo();" class="absolute -top-10 right-0 text-white hover:text-red-400 text-xl font-bold">Close <i class="fa-solid fa-xmark"></i></button>
+                <div class="video-container">
+                    <iframe id="tutorial-frame" src="https://www.youtube.com/embed/pP0xERLUhyc" title="WBC Count Tutorial" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                </div>
+            </div>
+        </div>
+
+        <!-- PRINTABLE REPORT MODAL -->
+        <div id="modal-calc" class="fixed inset-0 bg-black/90 z-[100] hidden flex items-center justify-center p-4">
+            <div id="printable-report" class="bg-white rounded-2xl max-w-lg w-full p-8 shadow-2xl transform transition-all scale-100 relative">
+                <div class="flex justify-between items-start border-b-2 border-slate-800 pb-4 mb-6">
+                    <div>
+                        <h1 class="text-2xl font-bold text-slate-900">HEMATOLOGY REPORT</h1>
+                        <p class="text-xs text-slate-500">DreamHigh Virtual Laboratories</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-xs text-slate-500">Date: <span id="report-date"></span></p>
+                        <p class="text-xs text-slate-500">Tech ID: STU-001</p>
+                    </div>
+                </div>
+                <div class="mb-6 bg-slate-50 p-4 rounded border border-slate-200">
+                    <p class="text-sm"><span class="font-bold">Patient Name:</span> <span id="report-name">John Doe</span></p>
+                    <p class="text-sm"><span class="font-bold">Clinical Note:</span> <span id="report-note" class="italic">Routine Checkup</span></p>
+                </div>
+                <table class="w-full text-sm mb-6">
+                    <thead class="bg-slate-100 border-b border-slate-300">
+                        <tr>
+                            <th class="text-left p-2">Test</th>
+                            <th class="text-left p-2">Result</th>
+                            <th class="text-left p-2">Units</th>
+                            <th class="text-left p-2">Ref. Range</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="p-2 font-bold">WBC Total</td>
+                            <td class="p-2 font-bold text-lg" id="report-value">0</td>
+                            <td class="p-2">/mm³</td>
+                            <td class="p-2">4,000-11,000</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div class="mb-8">
+                    <h3 class="font-bold text-xs uppercase tracking-wide text-slate-500 mb-1">Interpretation</h3>
+                    <p id="report-interpretation" class="handwritten text-xl">Normal finding.</p>
+                </div>
+                <div class="flex gap-4 print:hidden">
+                    <button onclick="window.print()" class="flex-1 bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl transition"><i class="fa-solid fa-print mr-2"></i> Print Report</button>
+                    <button onclick="document.getElementById('modal-calc').classList.add('hidden')" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-3 rounded-xl transition">Close</button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // --- GLOBAL STATE ---
+        let currentPatient = null;
+        let selectedPatientData = { min: 15, max: 40 }; // Default Fallback
+        let voiceEnabled = true;
+        let humEnabled = false;
+        let humAudio = null;
+
+        const PATIENTS = {
+            'normal': { name: "John Doe", note: "Routine Checkup", min: 15, max: 40 }, 
+            'high': { name: "Sarah Smith", note: "Acute Appendicitis", min: 70, max: 100 }, 
+            'low': { name: "Robert Lee", note: "Post-Chemotherapy", min: 5, max: 12 } 
+        };
+
+        function selectPatient(type) {
+            currentPatient = type;
+            selectedPatientData = PATIENTS[type];
+            document.getElementById('sidebar-patient').innerText = selectedPatientData.name;
+            document.getElementById('patient-modal').classList.add('hidden');
+            document.getElementById('report-name').innerText = selectedPatientData.name;
+            document.getElementById('report-note').innerText = selectedPatientData.note;
+            const d = new Date();
+            document.getElementById('report-date').innerText = d.toLocaleDateString();
+            speak("Welcome. Please proceed to the reception desk.");
+        }
+
+        // --- AUDIO ---
+        function toggleVoice() {
+            voiceEnabled = !voiceEnabled;
+            const btn = document.getElementById('voice-toggle');
+            btn.innerHTML = voiceEnabled ? '<i class="fa-solid fa-volume-high"></i> Voice: ON' : '<i class="fa-solid fa-volume-xmark"></i> Voice: OFF';
+            btn.classList.toggle('text-green-400', voiceEnabled);
+            btn.classList.toggle('text-slate-400', !voiceEnabled);
+        }
+
+        function speak(text) {
+            if(!voiceEnabled) return;
+            speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(text);
+            speechSynthesis.speak(u);
+        }
+
+        function toggleHum() {
+            humEnabled = !humEnabled;
+            const btn = document.getElementById('hum-toggle');
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            if(humEnabled) {
+                btn.innerHTML = '<i class="fa-solid fa-fan fa-spin"></i> Lab Hum: ON';
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(60, ctx.currentTime);
+                gain.gain.value = 0.05;
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                humAudio = { ctx, osc };
+            } else {
+                btn.innerHTML = '<i class="fa-solid fa-fan"></i> Lab Hum: OFF';
+                if(humAudio) { humAudio.osc.stop(); humAudio.ctx.close(); humAudio = null; }
+            }
+        }
+
+        function playSound(type) {
+            if(!voiceEnabled) return;
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            if(type === 'click') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(800, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+                osc.start(); osc.stop(ctx.currentTime+0.1);
+            } else if (type === 'error') {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5);
+                osc.start(); osc.stop(ctx.currentTime+0.5);
+            } else if (type === 'crack') {
+                osc.type = 'square'; osc.frequency.setValueAtTime(800, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+                osc.start(); osc.stop(ctx.currentTime+0.05);
+            }
+        }
+
+        // --- NAVIGATION ---
+        let quizScore = 0;
+        let accessGranted = false;
+
+        function navTo(page) {
+            if((page === 'dilution' || page === 'charging' || page === 'microscope') && !accessGranted) {
+                speak("Access denied. Please pass the safety quiz first.");
+                return;
+            }
+            document.querySelectorAll('.page-section').forEach(el => {
+                el.style.opacity = '0';
+                setTimeout(() => {
+                    el.classList.remove('active');
+                    if(el.id === 'page-' + page) {
+                        el.classList.add('active');
+                        setTimeout(()=>el.style.opacity='1', 50);
+                    }
+                }, 300);
+            });
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            if(page === 'home') document.querySelector('[onclick="navTo(\'home\')"]').classList.add('active');
+            if(page === 'theory') document.querySelector('[onclick="navTo(\'theory\')"]').classList.add('active');
+            if(page === 'dilution') document.getElementById('nav-dilution').classList.add('active');
+            if(page === 'charging') document.getElementById('nav-charging').classList.add('active');
+            if(page === 'microscope') document.getElementById('nav-microscope').classList.add('active');
+
+            if(page==='theory' && !accessGranted) speak("Please review the procedure and take the quiz.");
+            if(page==='dilution') speak("Aspirate carefully. Click 'USE' then click 'STOP' quickly.");
+            
+            // Force Init microscope if visiting that page
+            if(page === 'microscope') {
+                setTimeout(initMicroscope, 100);
+            }
+        }
+
+        function checkAnswer(q, isCorrect) {
+            playSound('click');
+            if(isCorrect) quizScore++;
+            if(quizScore === 2 && !accessGranted) {
+                accessGranted = true;
+                document.getElementById('quiz-questions').classList.add('hidden');
+                document.getElementById('quiz-success').classList.remove('hidden');
+                ['nav-dilution', 'nav-charging', 'nav-microscope'].forEach(id => {
+                    const el = document.getElementById(id);
+                    el.classList.remove('opacity-50', 'cursor-not-allowed');
+                    el.disabled = false;
+                    const lock = el.querySelector('.fa-lock');
+                    if(lock) lock.remove();
+                });
+                speak("Quiz passed. Lab access granted.");
+            }
+        }
+
+        // --- DILUTION LOGIC ---
+        let aspInterval = null;
+        let currentLiquidHeight = 0;
+        let targetLiquidHeight = 40; 
+        let aspirationActive = false;
+        let dilutionStep = 0; 
+
+        function startAspiration(type) {
+            if(aspirationActive) return;
+            if(type === 'blood' && dilutionStep !== 0) return;
+            if(type === 'turks' && dilutionStep !== 1) return;
+
+            aspirationActive = true;
+            document.getElementById('btn-stop-aspiration').classList.remove('hidden');
+            const pip = document.getElementById('pipette-obj');
+            pip.style.transform = type === 'blood' ? "translate(-280px, 40px)" : "translate(200px, 40px)";
+            targetLiquidHeight = type === 'blood' ? 40 : 90; 
+            currentLiquidHeight = type === 'blood' ? 0 : 40;
+            speak("Aspirating... Click Stop!");
+
+            setTimeout(() => {
+                const fluid = document.getElementById('pipette-fluid');
+                if(type === 'turks') fluid.style.backgroundColor = "#7c3aed";
+                aspInterval = setInterval(() => {
+                    currentLiquidHeight += 2; 
+                    fluid.style.height = currentLiquidHeight + '%';
+                    if(currentLiquidHeight > targetLiquidHeight + 10) triggerError("Overfilled!", "You drew too much liquid.");
+                }, 100);
+            }, 1000);
+        }
+
+        function stopAspiration() {
+            if(!aspirationActive) return;
+            clearInterval(aspInterval);
+            aspirationActive = false;
+            document.getElementById('btn-stop-aspiration').classList.add('hidden');
+            const diff = Math.abs(currentLiquidHeight - targetLiquidHeight);
+            document.getElementById('pipette-obj').style.transform = "translate(-50%, 0)";
+
+            if(diff > 10) {
+                triggerError("Underfilled!", "Sample volume insufficient.");
+            } else {
+                playSound('click');
+                speak("Perfect volume.");
+                if(dilutionStep === 0) {
+                    dilutionStep = 1;
+                    document.getElementById('dilution-task').innerText = "Now aspirate Turk's Solution";
+                    document.getElementById('vial-turks').classList.remove('opacity-50', 'pointer-events-none', 'filter', 'grayscale');
+                } else {
+                    dilutionStep = 2;
+                    document.getElementById('pipette-bead').style.opacity = 1;
+                    document.getElementById('dilution-task').innerText = "Shake to mix";
+                    document.getElementById('shake-overlay').classList.remove('hidden');
+                }
+            }
+        }
+
+        function performShake() {
+            const pip = document.getElementById('pipette-obj');
+            pip.classList.add('animate-shake-pipette');
+            document.querySelector('#shake-overlay button').innerHTML = "Mixing...";
+            setTimeout(() => {
+                pip.classList.remove('animate-shake-pipette');
+                document.getElementById('shake-overlay').classList.add('hidden');
+                document.getElementById('dilution-task').innerText = "Complete.";
+                document.getElementById('btn-dilution-next').disabled = false;
+                document.getElementById('btn-dilution-next').classList.replace('bg-slate-200', 'bg-sky-600');
+                document.getElementById('btn-dilution-next').classList.replace('text-slate-400', 'text-white');
+                speak("Sample homogenized.");
+            }, 2000);
+        }
+
+        function triggerError(title, msg) {
+            clearInterval(aspInterval);
+            aspirationActive = false;
+            document.getElementById('btn-stop-aspiration').classList.add('hidden');
+            playSound('error');
+            document.getElementById('error-title').innerText = title;
+            document.getElementById('error-msg').innerText = msg;
+            document.getElementById('error-overlay').classList.remove('hidden');
+        }
+
+        function resetDilution() {
+            document.getElementById('error-overlay').classList.add('hidden');
+            dilutionStep = 0;
+            currentLiquidHeight = 0;
+            document.getElementById('pipette-fluid').style.height = '0';
+            document.getElementById('pipette-obj').style.transform = "translate(-50%, 0)";
+            document.getElementById('vial-turks').classList.add('opacity-50', 'pointer-events-none', 'filter', 'grayscale');
+            document.getElementById('dilution-task').innerText = "Carefully aspirate Blood to 0.5";
+            speak("Try again.");
+        }
+
+        // --- CHARGING LOGIC (FIXED) ---
+        let chargeState = 0;
+        function chargeInteract(action) {
+            if(action === 'cover' && chargeState === 0) {
+                if(Math.random() < 0.15) {
+                    playSound('crack');
+                    document.getElementById('cracked-glass-overlay').classList.remove('hidden');
+                    speak("Oh no! Coverslip broken.");
+                    setTimeout(() => {
+                        alert("Coverslip broken! Resetting...");
+                        document.getElementById('cracked-glass-overlay').classList.add('hidden');
+                    }, 1500);
+                    return;
+                }
+                const cover = document.getElementById('slide-coverslip');
+                // Move from "floating" position to center
+                cover.style.top = "50%"; 
+                cover.style.left = "50%";
+                cover.style.transform = "translate(-50%, -50%) rotate(0deg)"; // Center exactly
+                cover.innerHTML = "";
+                chargeState = 1;
+                document.getElementById('btn-perform-charge').classList.remove('hidden');
+                speak("Coverslip placed successfully.");
+            }
+            if(action === 'charge' && chargeState === 1) {
+                const pip = document.getElementById('charge-pipette');
+                const fluid = document.getElementById('slide-fluid');
+                
+                // 1. Bring Pipette In
+                pip.classList.remove('opacity-0', 'pointer-events-none');
+                // Position relative to parent (#slide-obj), move to touch the edge
+                pip.style.top = "10px"; 
+                pip.style.right = "100px"; 
+                pip.style.transform = "rotate(-20deg)";
+
+                speak("Charging chamber...");
+                
+                setTimeout(() => {
+                    // 2. Fluid Spreads
+                    fluid.classList.replace('w-0', 'w-28');
+                    fluid.style.opacity = 0.8;
+                    playSound('click'); 
+
+                    setTimeout(() => {
+                        fluid.classList.replace('h-0', 'h-20');
+                        setTimeout(() => {
+                            // 3. Remove Pipette
+                            pip.style.transform = "translate(100px, -100px) rotate(45deg)";
+                            pip.style.opacity = "0";
+                            document.getElementById('btn-perform-charge').classList.add('hidden');
+                            document.getElementById('btn-charge-next').classList.remove('hidden');
+                            speak("Chamber charged. Ready.");
+                        }, 1000);
+                    }, 800);
+                }, 1000);
+            }
+        }
+
+        // --- MICROSCOPE (FIXED VISIBILITY) ---
+        let microscopeCount = 0;
+        let isFocused = false;
+
+        function initMicroscope() {
+            renderMicroscopeField(); // Force render
+            const slider = document.getElementById('focus-slider');
+            const layer = document.getElementById('optic-layer');
+            const valDisplay = document.getElementById('focus-val');
+            // Moderate blur so objects are visible but fuzzy
+            layer.style.filter = "blur(4px)"; 
+
+            slider.addEventListener('input', (e) => {
+                const val = parseInt(e.target.value);
+                // "Perfect focus" is around 85, range 80-90 is good
+                const deviation = Math.abs(85 - val); 
+                // Reduced divisor means blur changes faster, but initial blur is capped by logic below
+                let blurPx = deviation / 10; 
+                layer.style.filter = `blur(${blurPx}px)`;
+                
+                valDisplay.innerText = val + "%";
+                
+                // Allow clicking if relatively focused
+                isFocused = blurPx < 1.5;
+                
+                if(isFocused && val >= 83 && val <= 87) {
+                    // Optional: Visual cue for perfect focus
+                }
+            });
+        }
+
+        function renderMicroscopeField() {
+            const container = document.getElementById('optic-layer');
+            container.innerHTML = '';
+            // Basic grid structure
+            const gridHTML = `
+                <div style="display: grid; grid-template-columns: 1fr 10px 1fr; grid-template-rows: 1fr 10px 1fr; width: 100%; height: 100%; padding: 40px;">
+                    <div class="relative border-r-4 border-b-4 border-slate-400/50 box-border">${generateGridLines()}${generateCells()}</div>
+                    <div class="bg-slate-300/30"></div>
+                    <div class="relative border-l-4 border-b-4 border-slate-400/50 box-border">${generateGridLines()}${generateCells()}</div>
+                    <div class="bg-slate-300/30"></div><div class="bg-slate-300/30"></div><div class="bg-slate-300/30"></div>
+                    <div class="relative border-r-4 border-t-4 border-slate-400/50 box-border">${generateGridLines()}${generateCells()}</div>
+                    <div class="bg-slate-300/30"></div>
+                    <div class="relative border-l-4 border-t-4 border-slate-400/50 box-border">${generateGridLines()}${generateCells()}</div>
+                </div>`;
+            container.innerHTML = gridHTML;
+        }
+
+        function generateGridLines() {
+            return `<div class="absolute inset-0 grid grid-cols-4 grid-rows-4 pointer-events-none opacity-50">${Array(16).fill('<div class="border border-slate-400/30"></div>').join('')}</div>`;
+        }
+
+        function generateCells() {
+            // Ensure data exists
+            let min = selectedPatientData.min || 15;
+            let max = selectedPatientData.max || 40;
+            
+            let cellsHTML = '';
+            const count = Math.floor(Math.random() * (max - min)) + min;
+            for(let i=0; i<count; i++) {
+                const top = Math.random() * 80 + 10; 
+                const left = Math.random() * 80 + 10;
+                // Randomize scale for variety
+                const scale = 0.9 + Math.random() * 0.4;
+                cellsHTML += `<div class="wbc-nucleus cursor-pointer transition hover:scale-125" style="top:${top}%; left:${left}%; --scale:${scale};" onclick="countCell(this)"></div>`;
+            }
+            return cellsHTML;
+        }
+
+        function countCell(el) {
+            if(!isFocused) {
+                const disp = document.getElementById('counter-display');
+                disp.style.color = 'red';
+                speak("Focus image first.");
+                setTimeout(() => disp.style.color = '#4ade80', 200);
+                return;
+            }
+            if(!el.classList.contains('counted')) {
+                el.classList.add('counted');
+                microscopeCount++;
+                document.getElementById('counter-display').innerText = microscopeCount;
+                playSound('click');
+            }
+        }
+
+        function resetMicroscope() {
+            microscopeCount = 0;
+            document.getElementById('counter-display').innerText = "0";
+            document.getElementById('optic-layer').innerHTML = '';
+            renderMicroscopeField();
+        }
+
+        function calcResults() {
+            const total = microscopeCount * 50;
+            document.getElementById('report-value').innerText = total.toLocaleString();
+            let interp = "Normal Findings.";
+            if(total > 11000) interp = "Leukocytosis (High).";
+            if(total < 4000) interp = "Leukopenia (Low).";
+            document.getElementById('report-interpretation').innerText = interp;
+            document.getElementById('modal-calc').classList.remove('hidden');
+        }
+
+        function openVideoModal() { document.getElementById('modal-video').classList.remove('hidden'); }
+        function stopVideo() { document.getElementById('tutorial-frame').src = document.getElementById('tutorial-frame').src; }
+
+    </script>
+</body>
+</html>
