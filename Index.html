@@ -853,7 +853,7 @@
             const layer = document.getElementById('optic-layer');
             const valDisplay = document.getElementById('focus-val');
             // Moderate blur so objects are visible but fuzzy
-            layer.style.filter = "blur(4px)"; 
+            layer.style.filter = "blur(2px)"; 
 
             slider.addEventListener('input', (e) => {
                 const val = parseInt(e.target.value);
@@ -903,10 +903,11 @@
             let cellsHTML = '';
             const count = Math.floor(Math.random() * (max - min)) + min;
             for(let i=0; i<count; i++) {
-                const top = Math.random() * 80 + 10; // Keep away from extreme edges
+                const top = Math.random() * 80 + 10; 
                 const left = Math.random() * 80 + 10;
-                const scale = 0.8 + Math.random() * 0.4;
-                cellsHTML += `<div class="wbc-nucleus cursor-pointer transition hover:scale-150" style="top:${top}%; left:${left}%; --scale:${scale};" onclick="countCell(this)"></div>`;
+                // Randomize scale for variety
+                const scale = 0.9 + Math.random() * 0.4;
+                cellsHTML += `<div class="wbc-nucleus cursor-pointer transition hover:scale-125" style="top:${top}%; left:${left}%; --scale:${scale};" onclick="countCell(this)"></div>`;
             }
             return cellsHTML;
         }
