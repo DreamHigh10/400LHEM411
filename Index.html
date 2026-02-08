@@ -903,11 +903,10 @@
             let cellsHTML = '';
             const count = Math.floor(Math.random() * (max - min)) + min;
             for(let i=0; i<count; i++) {
-                const top = Math.random() * 80 + 10; 
+                const top = Math.random() * 80 + 10; // Keep away from extreme edges
                 const left = Math.random() * 80 + 10;
-                // Randomize scale for variety
-                const scale = 0.9 + Math.random() * 0.4;
-                cellsHTML += `<div class="wbc-nucleus cursor-pointer transition hover:scale-125" style="top:${top}%; left:${left}%; --scale:${scale};" onclick="countCell(this)"></div>`;
+                const scale = 0.8 + Math.random() * 0.4;
+                cellsHTML += `<div class="wbc-nucleus cursor-pointer transition hover:scale-150" style="top:${top}%; left:${left}%; --scale:${scale};" onclick="countCell(this)"></div>`;
             }
             return cellsHTML;
         }
